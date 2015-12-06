@@ -1,0 +1,4 @@
+name = CHat Hi
+description = Provides an auto response when chatbot is addressed
+core = 7.x
+dependencies[] = chat

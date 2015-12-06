@@ -1,0 +1,4 @@
+name = CHat SMS
+description = Adds SMS functionality to the chat bot. Responds to commands "SMS @user hi" and "SET MOBILE @user 9090909090"
+core = 7.x
+dependencies[] = chat

@@ -1,0 +1,18 @@
+<?php
+
+/**
+ * Implements hook_chat_intercept_alter().
+ */
+function chat_score_chat_intercept_alter($message, &$response) {
+  $lower_message = strtolower($message);
+  if ((strpos($lower_message, '@regina') !== false) && (strpos($lower_message, 'score') !== false)) {
+    $url = "http://static.cricinfo.com/rss/livescores.xml";
+    $feed = implode(file($url));
+    $xml = simplexml_load_string($feed);
+    $json = json_encode($xml);
+    $rss_array = json_decode($json, TRUE);
+    foreach ($rss_array['channel']['item'] as $idx => $item) {
+      $response.=chat_bot_t($item['description']);
+    }
+  }
+}

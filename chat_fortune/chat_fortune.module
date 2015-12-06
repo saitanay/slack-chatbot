@@ -1,0 +1,16 @@
+<?php
+
+/**
+ * Implements hook_chat_intercept_alter().
+ */
+function chat_fortune_chat_intercept_alter($message, &$response) {
+  $lower_message = strtolower($message);
+  if ((strpos($lower_message, '@regina') !== false) && (strpos($lower_message, 'how') !== false) && (strpos($lower_message, 'day') !== false)) {
+    $url = "http://www.findyourfate.com/rss/horoscope-astrology.asp";
+    $feed = implode(file($url));
+    $xml = simplexml_load_string($feed);
+    $json = json_encode($xml);
+    $rss_array = json_decode($json, TRUE);
+    $response.=$rss_array['channel']['item'][rand(1, 12)]['description'];
+  }
+}

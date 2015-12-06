@@ -1,0 +1,4 @@
+name = Chatbot score module
+description = Gives Live Cricket Score..
+core = 7.x
+dependencies[] = chat

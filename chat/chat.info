@@ -1,0 +1,3 @@
+name = Base of Chat Bot Module
+description = Basic Chat Bot Functionality -  Provides Karma and Swear Jar. 
+core = 7.x

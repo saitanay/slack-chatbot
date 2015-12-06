@@ -1,0 +1,34 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the chat bot module..
+ *
+ */
+
+/**
+ * Implementation of hook_schema().
+ */
+function chat_sms_schema() {
+  $schema['chat_sms'] = array(
+    'description' => t('sms phone number table'),
+    'fields' => array(
+      'handle' => array(
+        'description' => t('The slack uid'),
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE),
+      'mobile' => array(
+        'description' => t('Mobile Number'),
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE),
+    ),
+    'indexes' => array(
+      'handle' => array('handle'),
+    ),
+    'primary key' => array('handle'),
+  );
+
+  return $schema;
+}

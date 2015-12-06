@@ -1,0 +1,240 @@
+<?php
+
+/**
+ * @file
+ *   Basis functionality of the chat module.
+ */
+/**
+ * Bot name here. Though not used. Since it is to be configured on 
+ * Slack admin pages.
+ */
+define("CHAT_BOT_NAME", "Regina Cassandra");
+
+/**
+ * Implements hook_menu().
+ */
+function chat_menu() {
+  //We have just one callback. Which is an url that returns JSON
+  //to Slack. This url is pinged by slack everytime a message is received.
+  $items['chat'] = array(
+    'title' => 'Chat!',
+    'page callback' => 'chat',
+    'access callback' => TRUE,
+  );
+
+  return $items;
+}
+
+/**
+ * Page callback for /chat.
+ */
+function chat() {
+  //Edit this to whitelist tokens - You get these from slack admin UI
+  //@TODO: This could be made to have an admin form rather than hardcoded keys.
+  $valid_tokens = array('key1', 'key2', 'key3');
+
+  //Enable debug=1 and you get drupal page in return instead of JSON
+  //Useful for testing and inserting dsm()s.
+  $debug = 0;
+  if (isset($_GET['debug'])) {
+    if ($_GET['debug'] == 1) {
+      $debug = 1;
+    }
+  }
+
+  //@TODO: Sanitise inputs from Slack.
+  if ((in_array($_POST['token'], $valid_tokens) && $_POST['user_name'] != 'slackbot') || $debug == 1) {
+    //Blank response. This is built further by this module as well as by other
+    //modules through the hook
+    $response = "";
+    //The actual message pinged on slack
+    $message = $_POST['text'];
+    //Test message for debugging without a POST client
+    if ($debug) {
+      $message = "<@U03RVCRQY>: ++ <@U03RTE7CR> ++ <@U03RVCRQY>++";
+    }
+
+    /**
+     * Karma Management
+     */
+    //Check if the message contains ++ or --
+    if ((strpos($message, '++') !== false) || (strpos($message, '--') !== false)) {
+      //Yeah, an additional line. But let's not touch $message anytime
+      $subject = $message;
+      //Looks for @someone++ or @someone--
+      $pattern = '/\<\@([^\>]*)\>\:?\s?([\+\-][\+\-])/';
+      //Get all such matches
+      preg_match_all($pattern, $subject, $matches);
+      foreach ($matches[1] as $key => $handle) {
+        if ($_POST[user_id] != $handle) {
+          if ($matches[2][$key] == '--') {
+            $response .= chat_update_and_show_points($handle, "karma", -1);
+          }
+          if ($matches[2][$key] == '++') {
+            $response .= chat_update_and_show_points($handle, "karma", +1);
+          }
+        }
+        else {
+          //Prevent self karma
+          $response.=chat_bot_t("Nice Try");
+        }
+      }
+    }
+
+
+    /**
+     * Swear Words!
+     * EDIT THE SWEAR WORD LIST BELOW
+     * @TODO: Move swear words to a separate file and include them here
+     * so they are easily editable.
+     */
+    $badWords = array("capgemini", "kejriwal");
+    $string = $message;
+
+    $matches = array();
+    $matchFound = preg_match_all(
+        "/\b(" . implode($badWords, "|") . ")\b/i", $string, $matches
+    );
+
+    if ($matchFound) {
+      $words = array_unique($matches[0]);
+      foreach ($words as $word) {
+        $response .= chat_bot_t("Bad word $word detected!");
+        $response .= chat_update_and_show_points($_POST['user_id'], "swear", 1);
+      }
+    }
+
+    //Allow any module implementing hook_chat_intercept_alter to 
+    //receive teh response and act accordingly. They can also change the 
+    //$response built so far
+    drupal_alter('chat_intercept', $message, $response);
+
+    //In debug mode, we retirn a normal drupal page with the response.
+    if ($debug) {
+      return $response;
+    }
+    else {
+      //Return a JSON to slack
+      $response = array('text' => $response);
+      drupal_json_output($response);
+      exit;
+    }
+  }
+  else {
+    //Kill the process and dont return anything to save bandwidth if the 
+    //tokens dont match or if the user is a slackbot.
+    exit;
+  }
+}
+
+/**
+ * Helper function to insert a new handle to the table
+ * 
+ * @param string $handle
+ *  The user id
+ * @param string $context
+ *  karma or swear
+ * @return string
+ *  Response Message
+ */
+function chat_insert_user($handle, $context) {
+  $karma = ($context == "karma") ? 1 : 0;
+  $swear = ($context == "swear") ? 1 : 0;
+//We insert the record!
+  db_insert('chat_karma')
+      ->fields(array(
+        'handle' => $handle,
+        'karma' => $karma,
+        'swear' => $swear,
+      ))
+      ->execute();
+  return chat_bot_t(CHAT_BOT_NAME . " now has a new friend! Welcome <@$handle>");
+}
+
+/**
+ * Helper function to add points to user
+ * 
+ * @param string $handle
+ *  The user id
+ * @param string $context
+ *  karma or swear
+ * @param int $increment
+ *  The number of points to increment
+ * @return string
+ *  Response message
+ */
+function chat_update_and_show_points($handle, $context, $increment = 1) {
+  //Blank response message. Build it as you go.
+  $response = "";
+  //Simple query
+  $query = db_select('chat_karma', 'ck');
+  // Add extra detail to this query object: a condition, fields and a range.
+  $query->condition('ck.handle', $handle);
+  $query->fields('ck', array('karma', 'swear'));
+  $query->range(0, 1);
+  $result = $query->execute();
+  $number_of_rows = $result->rowCount();
+  $karma = 0;
+  $swear = 0;
+  if (!$number_of_rows) {
+    //This is a user whom the bot never saw before
+    if ($context == "karma") {
+      $karma+=$increment;
+    }
+    if ($context == "swear") {
+      $swear+=$increment;
+    }
+    //So call the helper function to add the user to our tables.
+    $response .= chat_insert_user($handle, $context);
+  }
+  else {
+    foreach ($result as $record) {
+      $karma = $record->karma;
+      $swear = $record->swear;
+      if ($context == "karma") {
+        $karma+=$increment;
+      }
+      if ($context == "swear") {
+        $swear+=$increment;
+      }
+      //Increment Karma or Swear and update the table.
+      $query = db_update('chat_karma')
+          ->condition('handle', $handle)
+          ->fields(array(
+            'karma' => $karma,
+            'swear' => $swear,
+          ))
+          ->execute();
+    }
+  }
+  //Build and return the reponse message.
+  $response .= chat_bot_t("<@$handle> now has $karma Karma points and $swear cookies in his swearjar!");
+  return $response;
+}
+
+/**
+ * A simple helper function to format the chatbot message with an EOL.
+ * Every response of chatbot to be sent through this.
+ * 
+ * @param string $message
+ * @return string
+ */
+function chat_bot_t($message) {
+  return $message . "\n";
+}
+
+/**
+ * A helper function used in swear word filtering.
+ * 
+ * @param string $str
+ * @param array $arr
+ * @return boolean
+ */
+function chat_contains($str, array $arr) {
+  foreach ($arr as $a) {
+    if (stripos($str, $a) !== false) {
+      return true;
+    }
+  }
+  return false;
+}

@@ -1,0 +1,78 @@
+<?php
+
+//Get this from SMS API provider,. msg91 in our case.
+define("APIKEY", "16537Adm0YZmYL52a6ea9f");
+
+/**
+ * Implements hook_chat_intercept_alter().
+ */
+function chat_sms_chat_intercept_alter($message, &$response) {
+  if ((strpos(strtolower($message), 'sms') !== false) && (substr(strtolower($message), 0, 3) === "sms")) {
+
+    $pattern = '/SMS|sms\s+<\@([^\>]*)\>\:?\s?(.*)/';
+    preg_match_all($pattern, $message, $matches);
+
+    $sms_text = $_POST['user_name'] . ": " . $matches[2][0];
+    $handle = $matches[1][0];
+
+    //Simple query
+    $query = db_select('chat_sms', 'cs');
+    // Add extra detail to this query object: a condition, fields and a range.
+    $query->condition('cs.handle', $handle);
+    $query->fields('cs', array('mobile'));
+    $query->range(0, 1);
+    $result = $query->execute();
+    $number_of_rows = $result->rowCount();
+    if (!$number_of_rows) {
+      //This is a user whom the bot never saw before
+      $response.=chat_bot_t("<@$handle> hasn't given me his mobile Number!'");
+      $response.=chat_bot_t("To update reply with:");
+      $response.=chat_bot_t("SET MOBILE <@$handle> 9848022338");
+      $response.=chat_bot_t("Don't worry. I won't ask you again, I just need it once..");
+    }
+    else {
+      foreach ($result as $record) {
+        $key = APIKEY;
+        $mobile = $record->mobile;
+        $api_string = "https://control.msg91.com/api/sendhttp.php?authkey=$key&mobiles=$mobile&message=$sms_text&sender=Drupal&route=4";
+        $api_response = drupal_http_request($api_string);
+        $response.=chat_bot_t("SMS sent to $mobile!");
+      }
+    }
+  }
+
+  if (strpos(strtolower($message), 'set mobile') !== false) {
+
+    $pattern = '/(set|SET)\s(mobile|MOBILE)\s+<\@([^\>]*)\>\:?\s?(\+91|0)?(\d{10})/';
+    preg_match_all($pattern, $message, $matches);
+    $handle = $matches[3][0];
+    $mobile = $matches[5][0];
+
+    //Simple query
+    $query = db_select('chat_sms', 'cs');
+    // Add extra detail to this query object: a condition, fields and a range.
+    $query->condition('cs.handle', $handle);
+    $query->fields('cs', array('mobile'));
+    $query->range(0, 1);
+    $result = $query->execute();
+    $number_of_rows = $result->rowCount();
+    if (!$number_of_rows) {
+      //INSERT
+      $data = array(
+        'handle' => $handle,
+        'mobile' => $mobile,
+      );
+      drupal_write_record('chat_sms', $data);
+    }
+    else {
+      //UPDATE
+      $data = array(
+        'handle' => $handle,
+        'mobile' => $mobile,
+      );
+
+      drupal_write_record('chat_sms', $data, 'handle');
+    }
+    $response.=chat_bot_t("Thank you! I have updated <@$handle>'s mobile number as $mobile in my phonebook!");
+  }
+}

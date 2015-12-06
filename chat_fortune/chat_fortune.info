@@ -1,0 +1,4 @@
+name = Chatbot fortune module
+description = Fortune cookies
+core = 7.x
+dependencies[] = chat
