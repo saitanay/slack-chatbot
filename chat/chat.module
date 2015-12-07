@@ -88,7 +88,7 @@ function chat() {
      * @TODO: Move swear words to a separate file and include them here
      * so they are easily editable.
      */
-    $badWords = array("capgemini", "kejriwal");
+    $badWords = array("windows", "word2", "word3");
     $string = $message;
 
     $matches = array();
